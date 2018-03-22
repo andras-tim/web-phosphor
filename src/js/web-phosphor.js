@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-unused-vars
 var webPhosphor = {
     'print': function print(text) {
         window.onload = function main () {
