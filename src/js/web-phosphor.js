@@ -1,129 +1,145 @@
-// eslint-disable-next-line no-unused-vars
-var webPhosphor = {
-    'print': function print(text) {
-        window.onload = function main () {
-            var app = new PIXI.Application({
-                'antialias': true,
-                'transparent': false,
-                'resolution': 1
-            });
+window.onload = function WebPhosphor () {
+    var app,
+        crtContainer,
+        cursor,
+        crtContainerFader,
+        cursorFader,
+        tickers = [],
 
-            var onResize = function onResize() {
-                app.renderer.resize(window.innerWidth, window.innerHeight);
-            };
-            window.onresize = onResize;
+        options = {
+            'cursorBlinkingSpeed': 80,  // ticks
+            'crtFadeDuration': 10  // ticks
+        },
+
+        consoleStyle = new PIXI.TextStyle({
+            'fontFamily': 'Source Code Pro, monospace',
+            'fontSize': 32,
+            'fill': '#00ff00'
+        }),
+
+        initApp = function initApp () {
+            var app = new PIXI.Application({
+                    'antialias': true,
+                    'transparent': false,
+                    'resolution': 1
+                }),
+                onParentResize = function onParentResize () {
+                    app.renderer.resize(window.innerWidth, window.innerHeight);
+                };
 
             app.renderer.backgroundColor = '#000';
-
             app.renderer.view.style.position = 'absolute';
             app.renderer.view.style.display = 'block';
             app.renderer.autoResize = true;
-            onResize();
 
+            onParentResize();
+            window.onresize = onParentResize;
             document.body.appendChild(app.view);
 
-            var style = new PIXI.TextStyle({
-                'fontFamily': 'Source Code Pro, monospace',
-                'fontSize': 32,
-                'fill': '#00ff00'
+            return app;
+        },
+
+        registerToLoop = function registerToLoop (callback) {
+            tickers.push(callback);
+        },
+
+        runTicks = function runTicks (delta) {
+            tickers.forEach(function runTicker (nextTick) {
+                nextTick(delta);
+            });
+        },
+
+        CrtFader = function CrtFader (obj, onDone) {
+            var enabled = false,
+                time = 0,
+                fadeDuration = options.crtFadeDuration,
+
+                startFading = function start () {
+                    enabled = true;
+                },
+
+                resetFade = function reset () {
+                    time = 0;
+                    obj.alpha = 1;
+                },
+
+                nextTick = function nextTick (delta) {
+                    if (!enabled) {
+                        return;
+                    }
+
+                    time += delta;
+                    obj.alpha = 1 - (time / fadeDuration);
+
+                    if (time >= fadeDuration) {
+                        enabled = false;
+                        if (onDone) {
+                            onDone();
+                        }
+                    }
+                };
+
+            registerToLoop(nextTick);
+            return {
+                'startFading': startFading,
+                'resetFade': resetFade
+            };
+        },
+
+        FlipFlop = function FlipFlop (stateTime, onUp, onDown) {
+            var state = false,
+                time = 0,
+
+                nextTick = function nextTick (delta) {
+                    time += delta;
+                    if (time < stateTime) {
+                        return;
+                    }
+
+                    time = 0;
+                    state = !state;
+                    if (state) {
+                        onUp();
+                    } else {
+                        onDown();
+                    }
+                };
+
+            registerToLoop(nextTick);
+            return {};
+        },
+
+        drawLoop = function drawLoop (delta) {
+            runTicks(delta);
+        },
+
+        main = function main () {
+
+
+            app = initApp();
+
+            crtContainer = new PIXI.Container();
+
+            app.stage.addChild(crtContainer);
+            crtContainerFader = new CrtFader(crtContainer, function () {
+                crtContainer.removeChildren();
+                crtContainerFader.resetFade();
             });
 
-            var positionX = 10;
-            var positionY = 10;
-
-            var index = 0;
-
-            var writeTickCount = 0;
-            var writeSpeed = 0;
-
-            var cursorTickCount = 0;
-            var cursorSpeed = 60;
-
-            var readTickCount = 0;
-            var readSpeed = 600;
-
-            var alpha;
-
-            var cursorTicksOfStates = cursorSpeed / 2;
-            var cursorTicksOfFade = cursorTicksOfStates / 3;
-
-            var cursorFadingStartTick = cursorTicksOfStates;
-            var cursorFadingStopTick = cursorTicksOfStates + cursorTicksOfFade;
-
-            var quip = new PIXI.Container();
-
-            var currentLine = null;
-
-            function newLine(y) {
-                var top = (y === undefined)
-                    ? currentLine.y + currentLine.height
-                    : y;
-
-                currentLine = new PIXI.Text('', style);
-                currentLine.position.set(positionX, top);
-                quip.addChild(currentLine);
-            }
-
-            function resetCursor() {
-                cursor.position.set(positionX + currentLine.width, currentLine.y);
-                cursorTickCount = 0;
-            }
-
-            app.stage.addChild(quip);
-            newLine(positionY);
-
-            var cursor = new PIXI.Text('█', style);
-            resetCursor();
+            cursor = new PIXI.Text('█', consoleStyle);
+            cursor.position.set(0, 0);
             app.stage.addChild(cursor);
+            cursorFader = new CrtFader(cursor);
+            new FlipFlop(options.cursorBlinkingSpeed, function showCursor () {
+                cursorFader.resetFade();
+            }, function hideCursor () {
+                cursorFader.startFading();
+            });
 
-            function gameLoop(delta) {
-                var char;
-
-                if (index < text.length) {
-
-                    if (writeTickCount >= writeSpeed) {
-                        char = text.substring(index, index + 1);
-                        if (char !== '\n') {
-                            currentLine.text += char;
-                        } else {
-                            newLine();
-                        }
-                        resetCursor();
-                        index++;
-                        writeTickCount = 0;
-                    }
-                    writeTickCount += delta;
-                }
-                else {
-                    if (readTickCount > readSpeed) {
-                        quip.removeChildren();
-                        newLine(positionY);
-                        index = 0;
-                        readTickCount = 0;
-                    }
-
-                    readTickCount += delta;
-                }
-
-                alpha = 1;
-                if (cursorTickCount < cursorFadingStartTick) {
-                }
-                else if (cursorTickCount < cursorFadingStopTick) {
-                    alpha = (cursorFadingStopTick - cursorTickCount) / cursorTicksOfFade;
-                }
-                else if (cursorTickCount < cursorSpeed) {
-                    alpha = 0;
-                }
-                else {
-                    cursorTickCount = 0;
-                }
-                cursor.alpha = alpha;
-
-                cursorTickCount += delta;
-            }
-
-            app.ticker.add(gameLoop);
             app.ticker.speed = 2;
+            app.ticker.add(drawLoop);
         };
-    }
+
+
+    main();
 };
