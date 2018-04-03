@@ -1,7 +1,7 @@
 # Web Phosphor
 JS rewrite of Phosphor Xscreensaver (with [PixiJS](http://www.pixijs.com/)).
 
-![screenshot1](docs/screenshots/screenshot1.png)
+![screenshot1](docs/screenshots/animation1.gif)
 
 Check this on [CodePen](https://codepen.io/andras-tim/pen/JLZaNa/).
 
