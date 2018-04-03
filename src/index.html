@@ -10,5 +10,22 @@
 <body>
     <script data-res="pixi" src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/4.7.1/pixi.min.js"></script>
     <script src="js/web-phosphor.js"></script>
+    <script>
+        var index = 0,
+            jokes = [
+                'Coffee is the most important meal of the day.',
+                'Q: What\'s the opposite of coffee?\nA: Sneezy.'
+            ],
+
+            getText = function getText () {
+                if (index >= jokes.length) {
+                    index = 0;
+                }
+
+                return jokes[index++];
+            };
+
+        new WebPhosphor(getText);
+    </script>
 </body>
 </html>

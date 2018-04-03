@@ -1,14 +1,14 @@
-window.onload = function WebPhosphor () {
+// eslint-disable-next-line no-unused-vars
+var WebPhosphor = function WebPhosphor (getTextCallback) {
     var app,
-        crtContainer,
-        cursor,
-        crtContainerFader,
-        cursorFader,
-        tickers = [],
+        terminal,
+        readingTimer,
 
         options = {
-            'cursorBlinkingSpeed': 80,  // ticks
-            'crtFadeDuration': 10  // ticks
+            'cursorBlinkingSpeed': 40,  // ticks
+            'crtFadeDuration': 5,  // ticks
+            'textTypingSpeed': 1,  // ticks
+            'textShowDuration': 250  // ticks
         },
 
         consoleStyle = new PIXI.TextStyle({
@@ -23,6 +23,7 @@ window.onload = function WebPhosphor () {
                     'transparent': false,
                     'resolution': 1
                 }),
+
                 onParentResize = function onParentResize () {
                     app.renderer.resize(window.innerWidth, window.innerHeight);
                 };
@@ -36,31 +37,33 @@ window.onload = function WebPhosphor () {
             window.onresize = onParentResize;
             document.body.appendChild(app.view);
 
+            app.ticker.speed = 1;
+
             return app;
         },
 
-        registerToLoop = function registerToLoop (callback) {
-            tickers.push(callback);
-        },
-
-        runTicks = function runTicks (delta) {
-            tickers.forEach(function runTicker (nextTick) {
-                nextTick(delta);
-            });
-        },
-
-        CrtFader = function CrtFader (obj, onDone) {
+        Timer = function Timer (sleepTime, onDone, onTick) {
             var enabled = false,
                 time = 0,
-                fadeDuration = options.crtFadeDuration,
 
-                startFading = function start () {
+                enable = function enable () {
+                    if (enabled) {
+                        return;
+                    }
+                    app.ticker.add(nextTick);
                     enabled = true;
                 },
 
-                resetFade = function reset () {
+                disable = function disable () {
+                    if (!enabled) {
+                        return;
+                    }
+                    app.ticker.remove(nextTick);
+                    enabled = false;
+                },
+
+                reset = function reset () {
                     time = 0;
-                    obj.alpha = 1;
                 },
 
                 nextTick = function nextTick (delta) {
@@ -69,17 +72,52 @@ window.onload = function WebPhosphor () {
                     }
 
                     time += delta;
-                    obj.alpha = 1 - (time / fadeDuration);
+                    if (onTick) {
+                        onTick(time, sleepTime);
+                    }
 
-                    if (time >= fadeDuration) {
-                        enabled = false;
-                        if (onDone) {
-                            onDone();
-                        }
+                    if (time < sleepTime) {
+                        return;
+                    }
+
+                    time -= sleepTime;
+                    if (onDone) {
+                        onDone();
                     }
                 };
 
-            registerToLoop(nextTick);
+            return {
+                'enable': enable,
+                'disable': disable,
+                'reset': reset
+            };
+        },
+
+        CrtFader = function CrtFader (obj, onDone) {
+            var timer,
+
+                startFading = function startFading () {
+                    timer.enable();
+                },
+
+                resetFade = function resetFade () {
+                    timer.reset();
+                    obj.alpha = 1;
+                },
+
+                onFadeDone = function onFadeDone () {
+                    timer.disable();
+                    if (onDone) {
+                        onDone();
+                    }
+                },
+
+                onFadingTick = function onFadingTick (time, fadeDuration) {
+                    obj.alpha = 1 - (time / fadeDuration);
+                };
+
+            timer = new Timer(options.crtFadeDuration, onFadeDone, onFadingTick);
+
             return {
                 'startFading': startFading,
                 'resetFade': resetFade
@@ -87,59 +125,166 @@ window.onload = function WebPhosphor () {
         },
 
         FlipFlop = function FlipFlop (stateTime, onUp, onDown) {
-            var state = false,
-                time = 0,
+            var timer,
+                state = false,
 
-                nextTick = function nextTick (delta) {
-                    time += delta;
-                    if (time < stateTime) {
-                        return;
-                    }
+                start = function start () {
+                    timer.enable();
+                },
 
-                    time = 0;
-                    state = !state;
+                stop = function stop () {
+                    timer.disable();
+                },
+
+                setUp = function setUp () {
+                    timer.reset();
+                    state = true;
+                    onUp();
+                },
+
+                setDown = function setDown () {
+                    timer.reset();
+                    state = false;
+                    onDown();
+                },
+
+                changeState = function changeState () {
                     if (state) {
-                        onUp();
+                        setDown();
                     } else {
-                        onDown();
+                        setUp();
                     }
                 };
 
-            registerToLoop(nextTick);
-            return {};
+            timer = new Timer(stateTime, changeState);
+
+            return {
+                'start': start,
+                'stop': stop,
+                'forceUp': setUp,
+                'forceDown': setDown
+            };
         },
 
-        drawLoop = function drawLoop (delta) {
-            runTicks(delta);
-        },
+        CrtTerminal = function CrtTerminal (terminalX, terminalY) {
+            var textBuffer = '',
+                textIndex = 0,
+                currentLine = null,
+                currentLineText = '',
+                onTypingDone,
+                onClearScreenDone,
+                crtContainer,
+                crtContainerFader,
+                cursor,
+                cursorFader,
+                cursorBlinker,
+                typingTimer,
 
-        main = function main () {
+                moveCursor = function moveCursor () {
+                    cursor.position.set(
+                        terminalX + (currentLineText ? currentLine.width : 0),
+                        currentLine.y
+                    );
+                    cursorBlinker.forceUp();
+                },
 
+                newLine = function newLine () {
+                    var y = currentLine ? currentLine.y + currentLine.height : terminalY;
 
-            app = initApp();
+                    currentLineText = '';
+                    currentLine = new PIXI.Text(currentLineText, consoleStyle);
+                    currentLine.position.set(terminalX, y);
+                    crtContainer.addChild(currentLine);
+                    moveCursor();
+                },
+
+                typeText = function typeText (text, onDone) {
+                    textBuffer = text;
+                    textIndex = 0;
+                    onTypingDone = onDone;
+                    typingTimer.enable();
+                },
+
+                typeChar = function typeChar (char) {
+                    if (char !== '\n') {
+                        currentLineText += char;
+                        currentLine.text = currentLineText;
+                        moveCursor();
+                    } else {
+                        newLine();
+                    }
+                },
+
+                typeNextChar = function typeNextChar () {
+                    if (!textBuffer || textIndex >= textBuffer.length) {
+                        typingTimer.disable();
+                        onTypingDone();
+                        return;
+                    }
+
+                    typeChar(textBuffer.substring(textIndex, textIndex + 1));
+                    textIndex++;
+                },
+
+                clearScreen = function clearScreen (onDone) {
+                    onClearScreenDone = onDone;
+                    crtContainerFader.startFading();
+                };
 
             crtContainer = new PIXI.Container();
-
             app.stage.addChild(crtContainer);
-            crtContainerFader = new CrtFader(crtContainer, function () {
+            crtContainerFader = new CrtFader(crtContainer, function resetContainer () {
                 crtContainer.removeChildren();
                 crtContainerFader.resetFade();
+                currentLine = null;
+                newLine();
+                onClearScreenDone();
             });
 
             cursor = new PIXI.Text('█', consoleStyle);
-            cursor.position.set(0, 0);
             app.stage.addChild(cursor);
             cursorFader = new CrtFader(cursor);
-            new FlipFlop(options.cursorBlinkingSpeed, function showCursor () {
+            cursorBlinker = new FlipFlop(options.cursorBlinkingSpeed, function showCursor () {
                 cursorFader.resetFade();
             }, function hideCursor () {
                 cursorFader.startFading();
             });
+            cursorBlinker.start();
 
-            app.ticker.speed = 2;
-            app.ticker.add(drawLoop);
+            typingTimer = new Timer(options.textTypingSpeed, function onNextChar () {
+                typeNextChar();
+            });
+
+            newLine();
+
+            return {
+                'typeText': typeText,
+                'clearScreen': clearScreen
+            };
+        },
+
+        typeAText = function typeAText () {
+            var text = getTextCallback();
+            terminal.typeText(text, readingTimer.enable);
+        },
+
+        onReadingTimerDone = function onReadingTimerDone () {
+            readingTimer.disable();
+            terminal.clearScreen(function onClearScreenDone () {
+                typeAText();
+            });
+        },
+
+        main = function main () {
+            app = initApp();
+            document.fonts.load(consoleStyle.toFontString()).then(function main () {
+                terminal = new CrtTerminal(20, 0);
+
+                readingTimer = new Timer(options.textShowDuration, onReadingTimerDone);
+                typeAText();
+            });
         };
 
 
-    main();
+    window.onload = main;
 };

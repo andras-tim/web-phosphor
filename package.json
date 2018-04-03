@@ -1,6 +1,6 @@
 {
   "name": "web-phosphor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "JS rewrite of Phosphor Xscreensaver (offline builder)",
   "author": "Andras Tim <andras.tim@gmail.com>",
   "license": "GPL-3.0",
