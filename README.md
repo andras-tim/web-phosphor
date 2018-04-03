@@ -1,12 +1,16 @@
 # Web Phosphor
-JS rewrite of Phosphor Xscreensaver
+JS rewrite of Phosphor Xscreensaver (with [PixiJS](http://www.pixijs.com/)).
 
 ![screenshot1](docs/screenshots/screenshot1.png)
+
+Check this on [CodePen](https://codepen.io/andras-tim/pen/JLZaNa/).
 
 
 ## Usage
 
-The `src/index.html` is a full example. This loads online resources and then start the **WebPhosphor** like this:
+At first, check the [`src/index.html`](src/index.html) file. This loads online resources and then start the
+**WebPhosphor** like this:
+
 ``` js
 new WebPhosphor(function getTextCallback() {
     return 'Coffee is the most important meal of the day';
